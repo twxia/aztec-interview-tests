@@ -29,6 +29,17 @@ export class MerkleTree {
     }
 
     // Implement.
+    if (!root) {
+      let node = this.hasher.hash(Buffer.alloc(LEAF_BYTES));
+      for (let i = 0; i < depth; i++) {
+        const parent = this.hasher.compress(node, node);
+        db.put(parent, Buffer.concat([node, node]));
+        node = parent;
+      }
+      this.root = node;
+    } else {
+      this.root = root;
+    }
   }
 
   /**
@@ -67,13 +78,34 @@ export class MerkleTree {
    * Returns the hash path for `index`.
    * e.g. To return the HashPath for index 2, return the nodes marked `*` at each layer.
    *     d0:                                            [ root ]
-   *     d1:                      [*]                                               [*]
-   *     d2:         [*]                      [*]                       [ ]                     [ ]
-   *     d3:   [ ]         [ ]          [*]         [*]           [ ]         [ ]          [ ]        [ ]
+   *     d1:                      [*]0                                               [*]
+   *     d2:         [*]0                      [*]1                       [ ]                     [ ]
+   *
+   *
+   *
+   *     d3:   [ ]0         [ ]1          [*]0         [*]1           [ ]         [ ]          [ ]        [ ]
+   *           0(000)         1(001)       2(010)        3(011)
    */
+
+  // d1, index: 3,  011 -> 01 -> "1" true (right)
   async getHashPath(index: number) {
     // Implement.
-    return new HashPath();
+    const hashPath = new HashPath();
+    let nodes = (await this.db.get(this.root)) as Buffer;
+    console.log(this.root.toString('hex'));
+    for (let i = this.depth - 1; i >= 0; i--) {
+      const left = nodes.slice(0, 32);
+      const right = nodes.slice(32, 64);
+
+      hashPath.data[i] = [left, right];
+      if (i !== 0) {
+        const isRight = this.isRight(index, i);
+        console.log(`isRight: ${isRight}, node: ${isRight ? right.toString('hex') : left.toString('hex')}`);
+        nodes = await this.db.get(isRight ? right : left);
+      }
+    }
+    console.log(hashPath.data.map(h => [h[0].toString('hex'), h[1].toString('hex')]));
+    return hashPath;
   }
 
   /**
@@ -81,6 +113,37 @@ export class MerkleTree {
    */
   async updateElement(index: number, value: Buffer) {
     // Implement.
+
+    this.root = await this._updateElement(index, this.root, 0, value);
+
     return this.root;
+  }
+
+  async _updateElement(index: number, parent: Buffer, currentDepth: number, value: Buffer) {
+    if (currentDepth === this.depth) {
+      return this.hasher.hash(value);
+    }
+    // console.log(currentDepth, parent.toString('hex'));
+    const nodes = (await this.db.get(parent)) as Buffer;
+    let left = nodes.slice(0, 32);
+    let right = nodes.slice(32, 64);
+    const isRight = this.isRight(index, currentDepth);
+    const latestNode = await this._updateElement(index, isRight ? right : left, currentDepth + 1, value);
+
+    if (isRight) {
+      right = latestNode;
+    } else {
+      left = latestNode;
+    }
+
+    const latestParent = this.hasher.compress(left, right);
+    console.log(`latestParent ${latestParent.toString('hex')}`);
+    await this.db.put(latestParent, Buffer.concat([left, right]));
+
+    return latestParent;
+  }
+
+  private isRight(index: number, currentDepth: number) {
+    return !!((index >> (this.depth - currentDepth - 1)) & 1);
   }
 }

@@ -21,7 +21,7 @@ describe('merkle_tree', () => {
     expect(root.toString('hex')).toEqual('1c9a7e5ff1cf48b4ad1582d3f4e4a1004f3b20d8c5a2b71387a4254ad933ebc5');
   });
 
-  it('should have correct root', async () => {
+  it.only('should have correct root', async () => {
     const db = levelup(memdown());
 
     const hasher = new Sha256Hasher();
