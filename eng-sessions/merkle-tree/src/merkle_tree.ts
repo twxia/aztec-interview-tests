@@ -99,7 +99,8 @@ export class MerkleTree {
 
       hashPath.data[i] = [left, right];
       if (i !== 0) {
-        const isRight = this.isRight(index, i);
+        // NOTE: Issue is at below current depth logic. Because my loop (i) trace it from bottom
+        const isRight = this.isRight(index, this.depth - i - 1);
         console.log(`isRight: ${isRight}, node: ${isRight ? right.toString('hex') : left.toString('hex')}`);
         nodes = await this.db.get(isRight ? right : left);
       }
